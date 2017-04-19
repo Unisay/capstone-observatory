@@ -2,7 +2,7 @@ package observatory
 
 import java.nio.file.Paths
 
-import observatory.Extraction.{fahrenheitToCelsius, locateTemperatures, stations, temperatures}
+import observatory.Extraction._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{FunSuite, MustMatchers}
@@ -12,26 +12,12 @@ class ExtractionTest extends FunSuite with MustMatchers {
 
   test("stations") {
     val path = Paths.get(getClass.getResource("/stations.csv").toURI)
-
-    val start = System.currentTimeMillis()
-    val result = stations(path).unsafeRun()
-    val elapsed = System.currentTimeMillis() - start
-
-    println("Elapsed: " + elapsed)
-
-    result must not be empty
+    withTime("stations()", stations(path).unsafeRun()) must not be empty
   }
 
   test("temperatures") {
     val path = Paths.get(getClass.getResource("/1982.csv").toURI)
-
-    val start = System.currentTimeMillis()
-    val result = temperatures(path).runLog.unsafeRun()
-    val elapsed = System.currentTimeMillis() - start
-
-    println("Elapsed: " + elapsed)
-
-    result must not be empty
+    withTime("temperatures()", temperatures(path).runLog.unsafeRun()) must not be empty
   }
 
   test("fahrenheit to celsius") {
@@ -39,8 +25,20 @@ class ExtractionTest extends FunSuite with MustMatchers {
   }
 
   test("locate temperatures") {
-    val result = locateTemperatures(year = 1982, "/stations.csv", "/1982.csv")
-    result must not be empty
+    withTime("locateTemperatures()", locateTemperatures(year = 1982, "/stations.csv", "/1982.csv")) must not be empty
+  }
+
+  test("locationYearlyAverageRecords") {
+    val temps = locateTemperatures(year = 1982, "/stations.csv", "/1982.csv")
+    withTime("locationYearlyAverageRecords()", locationYearlyAverageRecords(temps)) must not be empty
+  }
+
+  private def withTime[A](banner: String, a: => A): A = {
+    val start = System.currentTimeMillis()
+    val r = a
+    val elapsed = System.currentTimeMillis() - start
+    println(s"$banner took " + elapsed + " milliseconds")
+    r
   }
 
 }
