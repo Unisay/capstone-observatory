@@ -1,6 +1,6 @@
 package observatory
 
-import com.sksamuel.scrimage.{Image, Pixel}
+import com.sksamuel.scrimage.Image
 import observatory.Visualization.{interpolatePixel, predictTemperaturePar}
 
 /**
@@ -62,7 +62,10 @@ object Interaction {
     yearlyData: Iterable[(Int, Data)],
     generateImage: (Int, Int, Int, Int, Data) => Unit
   ): Unit = {
-    ???
+    yearlyData.foreach {
+      case (year, data) =>
+        for (z <- 0 to 3; y <- 0 until 256; x <- 0 until 256) generateImage(year, z, x, y, data)
+    }
   }
 
 }
