@@ -84,11 +84,13 @@ object Extraction {
     temperatures(Paths.get(getClass.getResource(temperaturesFile).toURI))
       .flatMap {
         case Temperature(key, monthDay, TempF(fahrenheit)) =>
-          stationMap.get(key).map { case Station(_, Lat(lat), Lon(lon)) =>
-              val location = Location(lat, lon)
-              val localDate = LocalDate.of(year, monthDay.getMonth, monthDay.getDayOfMonth)
-              val tempC = fahrenheitToCelsius(fahrenheit)
-              Stream((localDate, location, tempC))
+          stationMap.get(key)
+            .map {
+              case Station(_, Lat(lat), Lon(lon)) =>
+                val location = Location(lat, lon)
+                val localDate = LocalDate.of(year, monthDay.getMonth, monthDay.getDayOfMonth)
+                val tempC = fahrenheitToCelsius(fahrenheit)
+                Stream((localDate, location, tempC))
             }.getOrElse(Stream.empty)
         case _ =>
           Stream.empty

@@ -3,7 +3,7 @@ package observatory
 import com.sksamuel.scrimage.{Image, Pixel}
 import Math._
 
-import scala.collection.parallel.mutable.ParArray
+import scala.collection.parallel.ParIterable
 
 /**
   * 2nd milestone: basic visualization
@@ -11,7 +11,7 @@ import scala.collection.parallel.mutable.ParArray
 object Visualization {
 
   val earthRadiusMeters = 6372800
-  val powerParameter = 2.0
+  val powerParameter = 6.0
 
   def greatCircleDistance(a: Location, b: Location): Double = {
     val dLat = (b.lat - a.lat).toRadians
@@ -26,9 +26,10 @@ object Visualization {
     * @return The predicted temperature at `location`
     */
   def predictTemperature(temperatures: Iterable[(Location, Double)], location: Location): Double =
-    predictTemperaturePar(temperatures.toParArray)(location)
+    predictTemperaturePar(temperatures.par)(location)
 
-  def predictTemperaturePar(temps: ParArray[(Location, Double)])(location: Location): Double = {
+  def predictTemperaturePar(temps: ParIterable[(Location, Double)])(location: Location): Double = {
+    assert(temps.nonEmpty, "No temperatures available")
     val (numerator, denominator) = temps.foldLeft((0.0, 0.0)) {
       case ((num, den), (loc, temp)) =>
         val gcd = greatCircleDistance(location, loc)
@@ -63,7 +64,7 @@ object Visualization {
   def colorToPixel(color: Color): Pixel = Pixel(color.red, color.green, color.blue, alpha = 255)
   def pixelToColor(pixel: Pixel): Color = Color(pixel.red, pixel.green, pixel.blue)
 
-  def interpolatePixel(sorted: Array[(Double, Color)])(value: Double): Pixel = {
+  def interpolatePixel(sorted: Array[(Double, Color)], alpha: Int = 255)(value: Double): Pixel = {
     val first = sorted.head
     val last = sorted.last
     if (first._1 > value) {
@@ -83,7 +84,7 @@ object Visualization {
         interpolateColor(a._2.red,   b._2.red,   a._1, b._1, value),
         interpolateColor(a._2.green, b._2.green, a._1, b._1, value),
         interpolateColor(a._2.blue,  b._2.blue,  a._1, b._1, value),
-        255
+        alpha
       )
     }
   }
