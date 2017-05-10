@@ -1,23 +1,45 @@
 package observatory
 
 import com.sksamuel.scrimage.{Image, Pixel}
-import Math._
 
 import scala.collection.parallel.ParIterable
+import scala.math._
 
 /**
   * 2nd milestone: basic visualization
   */
 object Visualization {
 
-  val earthRadiusMeters = 6372800
+  val earthRadiusMeters = 6376774
   val powerParameter = 6.0
 
-  def greatCircleDistance(a: Location, b: Location): Double = {
-    val dLat = (b.lat - a.lat).toRadians
-    val dLon = (b.lon - a.lon).toRadians
-    val d = pow(sin(dLat / 2.0), 2.0) + pow(sin(dLon / 2.0), 2.0) * cos(a.lat.toRadians) * cos(b.lat.toRadians)
-    earthRadiusMeters * (2 * asin(sqrt(d)))
+  def fastACos(a: Double): Double = {
+    val negate = if (a < 0) 1.0 else 0.0
+    val x = abs(a)
+    val y = (((-0.0187293 * x + 0.0742610) * x - 0.2121144) * x + 1.5707288) * sqrt(1.0 - x)
+    val z = y - 2 * negate * y
+    negate * 3.14159265358979 + z
+  }
+
+  implicit class RichDouble(val d: Double) extends AnyVal {
+    def bound(l: Double, h: Double): Double = max(l, min(h, d))
+  }
+
+  case class Loc(lat: Double, lon: Double) {
+    val latR: Double = lat.toRadians
+    val lonR: Double = lon.toRadians
+    val sinLat: Double = math.sin(latR)
+    val cosLat: Double = math.cos(latR)
+    def toLocation = Location(lat, lon)
+  }
+
+  object Loc {
+    def apply(location: Location): Loc = Loc(location.lat, location.lon)
+  }
+
+  def greatCircleDistance(a: Loc, b: Loc): Double = {
+    val angle = a.sinLat * b.sinLat + a.cosLat * b.cosLat * cos(a.lonR - b.lonR)
+    earthRadiusMeters * fastACos(angle.bound(-1, +1))
   }
 
   /**
@@ -26,14 +48,14 @@ object Visualization {
     * @return The predicted temperature at `location`
     */
   def predictTemperature(temperatures: Iterable[(Location, Double)], location: Location): Double =
-    predictTemperaturePar(temperatures.par)(location)
+    predictTemperatureInt(temperatures.map { case (l, t) => (Loc(l), t) }.par)(Loc(location))
 
-  def predictTemperaturePar(temps: ParIterable[(Location, Double)])(location: Location): Double = {
+  def predictTemperatureInt(temps: ParIterable[(Loc, Double)])(location: Loc): Double = {
     assert(temps.nonEmpty, "No temperatures available")
     val (numerator, denominator) = temps.foldLeft((0.0, 0.0)) {
       case ((num, den), (loc, temp)) =>
         val gcd = greatCircleDistance(location, loc)
-        val wix = 1.0 / pow(gcd, powerParameter)
+        val wix = 1.0 / math.pow(gcd, powerParameter)
         val _num = num + wix * temp
         val _den = den + wix
         if (gcd < 1000)
@@ -57,14 +79,14 @@ object Visualization {
     } else if (len == 1) {
        scale.head._2
     } else {
-      pixelToColor(interpolatePixel(scale.sortBy(_._1).toArray)(value))
+      pixelToColor(interpolateColorInt(scale.sortBy(_._1).toArray)(value))
     }
   }
 
   def colorToPixel(color: Color): Pixel = Pixel(color.red, color.green, color.blue, alpha = 255)
   def pixelToColor(pixel: Pixel): Color = Color(pixel.red, pixel.green, pixel.blue)
 
-  def interpolatePixel(sorted: Array[(Double, Color)], alpha: Int = 255)(value: Double): Pixel = {
+  def interpolateColorInt(sorted: Array[(Double, Color)], alpha: Int = 255)(value: Double): Pixel = {
     val first = sorted.head
     val last = sorted.last
     if (first._1 > value) {
@@ -79,7 +101,7 @@ object Visualization {
       val a = before.last
       val b = after.head
       def interpolateColor(startColor: Int, stopColor: Int, x0: Double, x1: Double, x: Double) =
-        round((startColor * (x1 - x) + stopColor * (x - x0)) / (x1 - x0)).toInt
+        math.round((startColor * (x1 - x) + stopColor * (x - x0)) / (x1 - x0)).toInt
       Pixel(
         interpolateColor(a._2.red,   b._2.red,   a._1, b._1, value),
         interpolateColor(a._2.green, b._2.green, a._1, b._1, value),
@@ -94,11 +116,14 @@ object Visualization {
     * @param colors Color scale
     * @return A 360×180 image where each pixel shows the predicted temperature at its location
     */
-  def visualize(temperatures: Iterable[(Location, Double)], colors: Iterable[(Double, Color)]): Image = {
+  def visualize(temperatures: Iterable[(Location, Double)], colors: Iterable[(Double, Color)]): Image =
+    visualizeInt(temperatures.map { case (l, t) => (Loc(l), t) }, colors)
+
+  def visualizeInt(temperatures: Iterable[(Loc, Double)], colors: Iterable[(Double, Color)]): Image = {
     val locations = for {
       lat <- 90 until -90 by -1
       lon <- -180 until 180
-    } yield Location(lat, lon)
+    } yield Loc(lat, lon)
 
     assert(locations.length == 64800, "Wrong number of pixels")
 
@@ -107,8 +132,8 @@ object Visualization {
 
     val pixels = locations
       .par
-      .map(predictTemperaturePar(temps))
-      .map(interpolatePixel(colorScale))
+      .map(predictTemperatureInt(temps))
+      .map(interpolateColorInt(colorScale))
       .toArray
 
     Image(w = 360, h = 180, pixels)

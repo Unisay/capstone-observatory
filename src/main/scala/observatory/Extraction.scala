@@ -5,7 +5,12 @@ import java.time.{LocalDate, MonthDay}
 import java.util.concurrent.{ExecutorService, Executors}
 
 import fs2.{Strategy, Stream, Task, io, text}
+import observatory.Visualization.Loc
 
+import scala.Function.const
+import scala.collection.parallel.ParIterable
+import scala.collection.parallel.mutable.ParArray
+import scala.language.postfixOps
 import scala.util.Try
 
 /**
@@ -81,36 +86,54 @@ object Extraction {
     */
   def locateTemperatures(year: Int, stationsFile: String, temperaturesFile: String): Iterable[(LocalDate, Location, Double)] = {
     val stationMap = stations(Paths.get(getClass.getResource(stationsFile).toURI)).unsafeRun()
-    temperatures(Paths.get(getClass.getResource(temperaturesFile).toURI))
-      .flatMap {
-        case Temperature(key, monthDay, TempF(fahrenheit)) =>
-          stationMap.get(key)
-            .map {
-              case Station(_, Lat(lat), Lon(lon)) =>
-                val location = Location(lat, lon)
-                val localDate = LocalDate.of(year, monthDay.getMonth, monthDay.getDayOfMonth)
-                val tempC = fahrenheitToCelsius(fahrenheit)
-                Stream((localDate, location, tempC))
-            }.getOrElse(Stream.empty)
-        case _ =>
-          Stream.empty
-      }
-      .runLog
-      // TODO: Better way to convert stream to iterable
-      // https://github.com/arkig/spream/blob/master/src/main/scala/spream/stream/Conversions.scala
+    locateTemperaturesInt(year, stationMap, temperaturesFile)
+      .map { case (d, l, t) => (d, Location(l.lat, l.lon), t) }
+  }
+
+  def locateTemperaturesInt(year: Int, stationMap: Map[StationKey, Station], temperaturesFile: String): Iterable[(LocalDate, Loc, Double)] = {
+    assert(stationMap.nonEmpty, "No stations available")
+    val loadTemps: Task[Vector[(LocalDate, Loc, Double)]] =
+      temperatures(Paths.get(getClass.getResource(temperaturesFile).toURI))
+        .flatMap {
+          case Temperature(key, monthDay, TempF(fahrenheit)) =>
+            stationMap.get(key)
+              .map {
+                case Station(_, Lat(lat), Lon(lon)) =>
+                  val location = Loc(lat, lon)
+                  val localDate = LocalDate.of(year, monthDay.getMonth, monthDay.getDayOfMonth)
+                  val tempC = fahrenheitToCelsius(fahrenheit)
+                  Stream((localDate, location, tempC))
+              }.getOrElse(Stream.empty)
+          case row =>
+            println(s"Failed to parse temperature row: $row")
+            Stream.empty
+        }
+        // TODO: Better way to convert stream to iterable
+        // https://github.com/arkig/spream/blob/master/src/main/scala/spream/stream/Conversions.scala
+        .runLog
+    val temps = Task
+      .delay(println(s"Loading temperatures from $temperaturesFile"))
+      .flatMap(const(loadTemps))
       .unsafeRun()
+    assert(temps.nonEmpty, s"No temperatures are loaded from $temperaturesFile")
+    temps
   }
 
   /**
     * @param records A sequence containing triplets (date, location, temperature)
     * @return A sequence containing, for each location, the average temperature over the year.
     */
-  def locationYearlyAverageRecords(records: Iterable[(LocalDate, Location, Double)]): Iterable[(Location, Double)] = {
+  def locationYearlyAverageRecords(records: Iterable[(LocalDate, Location, Double)]): Iterable[(Location, Double)] =
+    locationYearlyAverageRecordsInt(records.map {case (d, l, t) => (d, Loc(l), t)})
+      .map { case (l, t) => (Location(l.lat, l.lon), t) }
+      .to[Iterable]
+
+  def locationYearlyAverageRecordsInt(records: Iterable[(LocalDate, Loc, Double)]): ParArray[(Loc, Double)] = {
     records.groupBy(_._2).map {
       case (location, group) =>
         val (cnt, sum) = group.map(_._3).foldLeft(0 -> 0.0){ case ((c, s), t) => (c + 1, s + t) }
         (location, sum / cnt)
-    }
+    }.toParArray
   }
 
 }
