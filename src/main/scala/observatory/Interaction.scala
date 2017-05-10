@@ -2,7 +2,7 @@ package observatory
 
 import scala.math._
 import com.sksamuel.scrimage.Image
-import observatory.Visualization.{Loc, interpolateColorInt, predictTemperatureInt}
+import observatory.Visualization.{Loc, _interpolateColor, _predictTemperature}
 
 import scala.collection.parallel.ParIterable
 
@@ -57,8 +57,8 @@ object Interaction {
 
     val pixels = locations
       .par
-      .map(predictTemperatureInt(temperatures))
-      .map(interpolateColorInt(colors, alpha = 127))
+      .map(_predictTemperature(temperatures))
+      .map(_interpolateColor(colors, alpha = 127))
       .toArray
 
     Image(w = tileSize, h = tileSize, pixels)

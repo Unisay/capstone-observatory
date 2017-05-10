@@ -53,7 +53,7 @@ class VisualizationTest extends FunSuite with Checkers with MustMatchers {
     val tempX = 10.0
     val tempY = 20.0
     val temperatures = List((x, tempX), (y, tempY))
-    val tempZ = predictTemperatureInt(temperatures.par)(z)
+    val tempZ = _predictTemperature(temperatures.par)(z)
     val tempZX = abs(tempX - tempZ)
     val tempZY = abs(tempY - tempZ)
     val zx = greatCircleDistance(z, x)

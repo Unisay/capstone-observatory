@@ -2,6 +2,7 @@ package observatory
 
 import com.sksamuel.scrimage.{Image, Pixel}
 
+import scala.collection.GenIterable
 import scala.collection.parallel.ParIterable
 import scala.math._
 
@@ -48,9 +49,9 @@ object Visualization {
     * @return The predicted temperature at `location`
     */
   def predictTemperature(temperatures: Iterable[(Location, Double)], location: Location): Double =
-    predictTemperatureInt(temperatures.map { case (l, t) => (Loc(l), t) }.par)(Loc(location))
+    _predictTemperature(temperatures.map { case (l, t) => (Loc(l), t) }.par)(Loc(location))
 
-  def predictTemperatureInt(temps: ParIterable[(Loc, Double)])(location: Loc): Double = {
+  def _predictTemperature(temps: GenIterable[(Loc, Double)])(location: Loc): Double = {
     assert(temps.nonEmpty, "No temperatures available")
     val (numerator, denominator) = temps.foldLeft((0.0, 0.0)) {
       case ((num, den), (loc, temp)) =>
@@ -59,7 +60,7 @@ object Visualization {
         val _num = num + wix * temp
         val _den = den + wix
         if (gcd < 1000)
-          return temp // early abort fold
+          return temp // early aborts fold, emits a style warning, is used for performance reasons
        else (_num, _den)
     }
     assert(denominator != 0.0, "Zero denominator")
@@ -79,14 +80,14 @@ object Visualization {
     } else if (len == 1) {
        scale.head._2
     } else {
-      pixelToColor(interpolateColorInt(scale.sortBy(_._1).toArray)(value))
+      pixelToColor(_interpolateColor(scale.sortBy(_._1).toArray)(value))
     }
   }
 
   def colorToPixel(color: Color): Pixel = Pixel(color.red, color.green, color.blue, alpha = 255)
   def pixelToColor(pixel: Pixel): Color = Color(pixel.red, pixel.green, pixel.blue)
 
-  def interpolateColorInt(sorted: Array[(Double, Color)], alpha: Int = 255)(value: Double): Pixel = {
+  def _interpolateColor(sorted: Array[(Double, Color)], alpha: Int = 255)(value: Double): Pixel = {
     val first = sorted.head
     val last = sorted.last
     if (first._1 > value) {
@@ -95,19 +96,25 @@ object Visualization {
       colorToPixel(last._2)
     } else {
       val before = sorted.takeWhile(_._1 < value)
-      if (before.isEmpty) return colorToPixel(first._2)
-      val after = sorted.dropWhile(_._1 < value)
-      if (after.isEmpty) return colorToPixel(last._2)
-      val a = before.last
-      val b = after.head
-      def interpolateColor(startColor: Int, stopColor: Int, x0: Double, x1: Double, x: Double) =
-        math.round((startColor * (x1 - x) + stopColor * (x - x0)) / (x1 - x0)).toInt
-      Pixel(
-        interpolateColor(a._2.red,   b._2.red,   a._1, b._1, value),
-        interpolateColor(a._2.green, b._2.green, a._1, b._1, value),
-        interpolateColor(a._2.blue,  b._2.blue,  a._1, b._1, value),
-        alpha
-      )
+      if (before.isEmpty) {
+        colorToPixel(first._2)
+      } else {
+        val after = sorted.dropWhile(_._1 < value)
+        if (after.isEmpty) {
+          colorToPixel(last._2)
+        } else {
+          val a = before.last
+          val b = after.head
+          def interpolateColor(startColor: Int, stopColor: Int, x0: Double, x1: Double, x: Double) =
+            math.round((startColor * (x1 - x) + stopColor * (x - x0)) / (x1 - x0)).toInt
+          Pixel(
+            interpolateColor(a._2.red,   b._2.red,   a._1, b._1, value),
+            interpolateColor(a._2.green, b._2.green, a._1, b._1, value),
+            interpolateColor(a._2.blue,  b._2.blue,  a._1, b._1, value),
+            alpha
+          )
+        }
+      }
     }
   }
 
@@ -117,9 +124,9 @@ object Visualization {
     * @return A 360×180 image where each pixel shows the predicted temperature at its location
     */
   def visualize(temperatures: Iterable[(Location, Double)], colors: Iterable[(Double, Color)]): Image =
-    visualizeInt(temperatures.map { case (l, t) => (Loc(l), t) }, colors)
+    _visualize(temperatures.map { case (l, t) => (Loc(l), t) }, colors)
 
-  def visualizeInt(temperatures: Iterable[(Loc, Double)], colors: Iterable[(Double, Color)]): Image = {
+  def _visualize(temperatures: Iterable[(Loc, Double)], colors: Iterable[(Double, Color)]): Image = {
     val locations = for {
       lat <- 90 until -90 by -1
       lon <- -180 until 180
@@ -132,8 +139,8 @@ object Visualization {
 
     val pixels = locations
       .par
-      .map(predictTemperatureInt(temps))
-      .map(interpolateColorInt(colorScale))
+      .map(_predictTemperature(temps))
+      .map(_interpolateColor(colorScale))
       .toArray
 
     Image(w = 360, h = 180, pixels)

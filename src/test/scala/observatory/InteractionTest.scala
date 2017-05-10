@@ -30,7 +30,7 @@ class InteractionTest extends FunSuite with Checkers {
   test("tile000") {
     val stationMap = stations(Paths.get(getClass.getResource("/stations_2021.csv").toURI)).unsafeRun()
 
-    val temperatures = locationYearlyAverageRecordsInt(locateTemperaturesInt(year = 2021, stationMap, "/2021.csv"))
+    val temperatures = _locationYearlyAverageRecords(locateTemperaturesInt(year = 2021, stationMap, "/2021.csv"))
     tileInt(temperatures, colors, zoom = 0, x = 0, y = 0).output("/tmp/tile000.png")
     tileInt(temperatures, colors, zoom = 1, x = 0, y = 0).output("/tmp/tile100.png")
     tileInt(temperatures, colors, zoom = 1, x = 1, y = 0).output("/tmp/tile110.png")
@@ -54,7 +54,7 @@ class InteractionTest extends FunSuite with Checkers {
     }
 
     def loadYearAvgTemps(year: Int) =
-      tempMap.update(year, locationYearlyAverageRecordsInt(locateTemperaturesInt(year, stationMap, s"/$year.csv")))
+      tempMap.update(year, _locationYearlyAverageRecords(locateTemperaturesInt(year, stationMap, s"/$year.csv")))
 
     val years = 1975 to 2015
 //    val years = Seq(1982)
